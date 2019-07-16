@@ -679,10 +679,6 @@ namespace gx
         void on(stse::proc*p){p->on(this);}
     };
 
-    struct prog {
-
-    };
-
     struct example
     {
         static vtxb* get_vtxb()
@@ -718,6 +714,135 @@ namespace gx
 
 namespace gx
 {
+    struct prog  // shared program fsm, some set of the prog* stored at GL-widget side
+    {
+        QOpenGLShaderProgram program;  // qt-shader program implementation
+
+        struct some_state: protected QOpenGLFunctions {
+            virtual ~some_state() {}
+            virtual void set_current(prog*) = 0;
+            virtual const char* get_failure(prog*) = 0;
+        };
+
+        static some_state* get_fail_state() {
+            static struct : some_state {
+                virtual void set_current(prog*){}
+                virtual const char* get_failure(prog*) {return "empty FAIL state"; }
+            }ss; return &ss;
+        }
+
+        static some_state* get_init_state()
+        {
+            static struct : some_state
+            {
+                void set_current(prog* p)
+                {
+                    initializeOpenGLFunctions();
+                    qDebug() << "!!!!!!!!!!!!";
+
+                    if (!p->program.addShaderFromSourceFile(
+                                QOpenGLShader::Vertex, ":/vshader.glsl"))
+                    {
+                        p->current_state = p->get_fail_state();
+                        qDebug() << "BAD VERTEX SHADER CODE?";
+                        return;
+                    }
+
+                    qDebug() << "VSHADER_ADDED_FROM_CODE";
+
+                    // Compile fragment shader
+                    if (!p->program.addShaderFromSourceFile(
+                                QOpenGLShader::Fragment, ":/fshader.glsl"))
+                    {
+                        qDebug() << "BAD FRAGMENT SHADER CODE?";
+                        p->current_state = p->get_fail_state();
+                        return;
+                    }
+                    qDebug() << "FSHADER_ADDED_FROM_CODE";
+
+
+                    // Link shader pipeline
+                    if (!p->program.link())
+                    {
+                        p->current_state = p->get_fail_state();
+                        return;
+                    }
+                    qDebug() << "GLSL SHADER PROGRAM LINKED";
+
+                    // Bind shader pipeline for use
+                    if (!p->program.bind())
+                    {
+                        p->current_state = p->get_fail_state();
+                        return;
+                    }
+
+                    qDebug() << "program max geom output vertices => " << p->program.maxGeometryOutputVertices();
+
+                    GLuint program_id = p->program.programId();
+
+                    qDebug() << "program.programId() => " << program_id;
+
+                    GLint i;                    // var's id
+                    GLint count;                // active vars count
+                    GLint size;                 // size of the variable
+
+                    GLenum type;                // type of the variable (float, vec3 or mat4, etc)
+
+                    const GLsizei bufSize = 1024; // maximum name length
+                    GLchar name[bufSize];         // variable GLSL name
+                    GLsizei length;               // variable name length
+
+                    glGetProgramiv(program_id, GL_ACTIVE_ATTRIBUTES, &count);
+
+                    qDebug() << "Active Attributes:" << count;
+
+                    for (i = 0; i < count; i++)
+                    {
+                        glGetActiveAttrib(program_id, (GLuint)i, bufSize, &length, &size, &type, name);
+
+                        printf ( "Attribute #%d Type: '%s' Name: '%s'\n" , i
+                               , gx::vtxa::get_glsl_type_name(type)
+                               , name
+                               );
+                    }
+
+                    glGetProgramiv(program_id, GL_ACTIVE_UNIFORMS, &count);
+
+                    qDebug() << "Active Uniforms:" << count;
+
+                    for (i = 0; i < count; i++)
+                    {
+                        glGetActiveUniform(program_id, (GLuint)i, bufSize, &length, &size, &type, name);
+
+                        printf ( "Uniform #%d Type: '%s' Name: '%s' Size:%d\n" , i
+                               , gx::unfa::get_glsl_type_name(type)
+                               , name
+                               , size
+                               );
+                    }
+                }
+                virtual const char* get_failure(prog*) { return "empty INIT state"; }
+            } ss; return &ss;
+        }
+        static some_state* get_draw_state() {
+            static struct : some_state {
+                virtual void set_current(prog*) {}
+                virtual const char* get_failure(prog*) { return "empty DRAW state"; }
+            } ss; return &ss;
+        }
+        static some_state* get_free_state() {
+            static struct : some_state {
+                virtual void set_current(prog*) {}
+                virtual const char* get_failure(prog*) { return "empty FREE state"; }
+            } ss; return &ss;
+        }
+        some_state *current_state = get_init_state();
+
+        void set_current()        {        current_state->set_current(this); }
+        const char* get_failure() { return current_state->get_failure(this); }
+
+    };
+
     class root : public QOpenGLWidget, protected QOpenGLFunctions
     {
         Q_OBJECT
@@ -727,6 +852,7 @@ namespace gx
 
         virtual ~root(){}
 
+        virtual gx::prog* get_program(const char* = nullptr) { return &prog0; }
     protected:
         virtual void mousePressEvent   (QMouseEvent *e){qDebug()<<e;}  // override;
 
@@ -778,6 +904,9 @@ namespace gx
 
         virtual void initShaders  ()
         {
+            // TODO: REMOVE FROM HERE
+            prog0.set_current();
+
             // Compile vertex shader
             if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/vshader.glsl"))
                 close();
@@ -846,6 +975,7 @@ namespace gx
         }
 
     private:
+        gx::prog              prog0;
         QBasicTimer           timer;
         QOpenGLShaderProgram  program;
         QOpenGLTexture       *texture;
