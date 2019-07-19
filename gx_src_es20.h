@@ -162,12 +162,26 @@ namespace gx
 
         virtual const char* get_glsl_type_name() const = 0;
 
-        // virtual int get_size() const = 0;
+        virtual bool is_prototype() { return true;  }  // is prototype w/o data buffer
+
+        virtual bool is_reference() { return false; }  // is reference to external data buffer
 
         virtual ~vtxa(){}
 
-        static const char* get_glsl_type_name(const int& n);
-    };                                                            // vtxa
+        static const char* get_glsl_type_name(const int& n);  // return GLSL name for GL TYPE ID
+
+        static vtxa* make_new(const int& gl_type_id);         // return supported unfa or NULL
+
+        void   set_prog_indx(const GLuint& i) { m_prog_indx = i; }
+        GLuint get_prog_indx() const          { return m_prog_indx; }
+
+        void   set_prog_size(const GLint& s)  { m_prog_size = s; }
+        GLint  get_prog_size() const          { return m_prog_size; }
+
+    protected:
+        GLuint m_prog_indx = -1;
+        GLint  m_prog_size = 0;
+    };                                                        // vtxa
 
     // GLES2.0 GLSL1.1 uniform attributes
 
@@ -177,12 +191,14 @@ namespace gx
     struct uv1u;    struct um2f;    struct um3f;    struct um4f;  // unsigned int, mat*
     struct tx2d;  // sampler2D     GL_SAMPLER_2D
     struct txcb;  // samplerCube   GL_SAMPLER_CUBE
+    struct unfr;  // reference to any unfa concrete class, even unfr
 
     struct unfa
     {
         struct prog
         {
             virtual ~prog(){}
+            virtual void on(gx::unfr*) = 0;  // REF TO ANY OTHER unfa*
             virtual void on(gx::uv1f*) = 0;  // float         GL_FLOAT
             virtual void on(gx::uv2f*) = 0;  // vec2          GL_FLOAT_VEC2
             virtual void on(gx::uv3f*) = 0;  // vec3          GL_FLOAT_VEC3
@@ -207,18 +223,30 @@ namespace gx
 
         virtual ~unfa() {}
 
-        virtual const char* get_glsl_type_id() = 0;
+        virtual int get_glsl_type_id() const = 0;
 
-        virtual const char* get_glsl_type_name() = 0;
+        virtual const char* get_glsl_type_name() const = 0;
 
         static const char* get_glsl_type_name(const int& n);
+
+        static unfa* make_new(const int& gl_type_id);
+
+        void   set_prog_indx(const GLuint& i) { m_prog_indx = i; }
+        GLuint get_prog_indx() const          { return m_prog_indx; }
+
+        void   set_prog_size(const GLint& s)  { m_prog_size = s; }
+        GLint  get_prog_size() const          { return m_prog_size; }
+
+    protected:
+        GLuint m_prog_indx = -1;
+        GLint  m_prog_size = 0;
     };                                                            // unfa
 
     struct av1f : vtxa
     {
         virtual ~av1f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -230,8 +258,8 @@ namespace gx
     struct av2f : vtxa
     {
         virtual ~av2f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -243,8 +271,8 @@ namespace gx
     struct av3f : vtxa
     {
         virtual ~av3f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -256,8 +284,8 @@ namespace gx
     struct av4f : vtxa
     {
         virtual ~av4f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -269,8 +297,8 @@ namespace gx
     struct av1i : vtxa
     {
         virtual ~av1i() {}
-        virtual int*   get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual int*   get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -282,8 +310,8 @@ namespace gx
     struct av2i : vtxa
     {
         virtual ~av2i() {}
-        virtual int*   get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual int*   get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -295,8 +323,8 @@ namespace gx
     struct av3i : vtxa
     {
         virtual ~av3i() {}
-        virtual int*   get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual int*   get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -308,8 +336,8 @@ namespace gx
     struct av4i : vtxa
     {
         virtual ~av4i() {}
-        virtual int*   get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual int*   get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -321,8 +349,8 @@ namespace gx
     struct av1u : vtxa
     {
         virtual ~av1u() {}
-        virtual unsigned int* get_buff() = 0;
-        virtual int           get_size() = 0;
+        virtual unsigned int* get_buff() { return nullptr; }
+        virtual int           get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -334,8 +362,8 @@ namespace gx
     struct av1b : vtxa
     {
         virtual ~av1b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
 
         void on(vtxa::proc* o) { o->on(this); }
@@ -348,8 +376,8 @@ namespace gx
     struct av2b : vtxa
     {
         virtual ~av2b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -361,8 +389,8 @@ namespace gx
     struct av3b : vtxa
     {
         virtual ~av3b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -374,8 +402,8 @@ namespace gx
     struct av4b : vtxa
     {
         virtual ~av4b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -387,8 +415,8 @@ namespace gx
     struct am2f : vtxa
     {
         virtual ~am2f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -400,8 +428,8 @@ namespace gx
     struct am3f : vtxa
     {
         virtual ~am3f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -413,8 +441,8 @@ namespace gx
     struct am4f : vtxa
     {
         virtual ~am4f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(vtxa::proc* o) { o->on(this); }
 
@@ -429,8 +457,8 @@ namespace gx
     struct uv1f : unfa
     {
         virtual ~uv1f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -442,8 +470,8 @@ namespace gx
     struct uv2f : unfa
     {
         virtual ~uv2f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -455,8 +483,8 @@ namespace gx
     struct uv3f : unfa
     {
         virtual ~uv3f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -468,8 +496,8 @@ namespace gx
     struct uv4f : unfa
     {
         virtual ~uv4f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -481,8 +509,8 @@ namespace gx
     struct uv1i : unfa
     {
         virtual ~uv1i() {}
-        virtual int* get_buff() = 0;
-        virtual int  get_size() = 0;
+        virtual int* get_buff() { return nullptr; }
+        virtual int  get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -494,8 +522,8 @@ namespace gx
     struct uv2i : unfa
     {
         virtual ~uv2i() {}
-        virtual int* get_buff() = 0;
-        virtual int  get_size() = 0;
+        virtual int* get_buff() { return nullptr; }
+        virtual int  get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -507,8 +535,8 @@ namespace gx
     struct uv3i : unfa
     {
         virtual ~uv3i() {}
-        virtual int* get_buff() = 0;
-        virtual int  get_size() = 0;
+        virtual int* get_buff() { return nullptr; }
+        virtual int  get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -520,8 +548,8 @@ namespace gx
     struct uv4i : unfa
     {
         virtual ~uv4i() {}
-        virtual int* get_buff() = 0;
-        virtual int  get_size() = 0;
+        virtual int* get_buff() { return nullptr; }
+        virtual int  get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -533,8 +561,8 @@ namespace gx
     struct uv1u : unfa
     {
         virtual ~uv1u() {}
-        virtual unsigned int* get_buff() = 0;
-        virtual int  get_size() = 0;
+        virtual unsigned int* get_buff() { return nullptr; }
+        virtual int           get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -546,8 +574,8 @@ namespace gx
     struct uv1b : unfa
     {
         virtual ~uv1b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -559,8 +587,8 @@ namespace gx
     struct uv2b : unfa
     {
         virtual ~uv2b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -572,8 +600,8 @@ namespace gx
     struct uv3b : unfa
     {
         virtual ~uv3b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -585,8 +613,8 @@ namespace gx
     struct uv4b : unfa
     {
         virtual ~uv4b() {}
-        virtual bool* get_buff() = 0;
-        virtual int   get_size() = 0;
+        virtual bool* get_buff() { return nullptr; }
+        virtual int   get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -598,8 +626,8 @@ namespace gx
     struct um2f : unfa
     {
         virtual ~um2f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -611,8 +639,8 @@ namespace gx
     struct um3f : unfa
     {
         virtual ~um3f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -624,8 +652,8 @@ namespace gx
     struct um4f : unfa
     {
         virtual ~um4f() {}
-        virtual float* get_buff() = 0;
-        virtual int    get_size() = 0;
+        virtual float* get_buff() { return nullptr; }
+        virtual int    get_size() { return 0; }
 
         void on(unfa::prog* o) { o->on(this); }
 
@@ -655,6 +683,30 @@ namespace gx
 
         const char* get_glsl_type_name() const { return "samplerCube"; }
     };
+
+    struct unfr : unfa
+    {
+        virtual ~unfr() {}
+
+        void on(unfa::prog* o) { o->on(this); }
+
+        virtual int  get_glsl_type_id() const {
+            return mp_unfa ? mp_unfa->get_glsl_type_id() : 0;
+        }
+
+        virtual const char* get_glsl_type_name() const {
+            return mp_unfa ? mp_unfa->get_glsl_type_name():"nullptr";
+        }
+
+        virtual unfa* get_unfa() const { return mp_unfa; }
+
+        virtual unfa* set_unfa(unfa* pnew) { unfa* prev = mp_unfa; mp_unfa = pnew; return prev; }
+
+    protected:
+
+        unfa* mp_unfa = nullptr;
+    };
+
 
     struct stse
     {
@@ -716,7 +768,9 @@ namespace gx
 {
     struct prog  // shared program fsm, some set of the prog* stored at GL-widget side
     {
-        QOpenGLShaderProgram program;  // qt-shader program implementation
+        QOpenGLShaderProgram         program;                    // qt5 glsl program implementation
+        std::map<std::string, vtxa*> program_active_attributes;  // this program active vertex-vars
+        std::map<std::string, unfa*> program_active_uniform;
 
         struct some_state: protected QOpenGLFunctions {
             virtual ~some_state() {}
@@ -731,99 +785,7 @@ namespace gx
             }ss; return &ss;
         }
 
-        static some_state* get_init_state()
-        {
-            static struct : some_state
-            {
-                void set_current(prog* p)
-                {
-                    initializeOpenGLFunctions();
-                    qDebug() << "!!!!!!!!!!!!";
-
-                    if (!p->program.addShaderFromSourceFile(
-                                QOpenGLShader::Vertex, ":/vshader.glsl"))
-                    {
-                        p->current_state = p->get_fail_state();
-                        qDebug() << "BAD VERTEX SHADER CODE?";
-                        return;
-                    }
-
-                    qDebug() << "VSHADER_ADDED_FROM_CODE";
-
-                    // Compile fragment shader
-                    if (!p->program.addShaderFromSourceFile(
-                                QOpenGLShader::Fragment, ":/fshader.glsl"))
-                    {
-                        qDebug() << "BAD FRAGMENT SHADER CODE?";
-                        p->current_state = p->get_fail_state();
-                        return;
-                    }
-                    qDebug() << "FSHADER_ADDED_FROM_CODE";
-
-
-                    // Link shader pipeline
-                    if (!p->program.link())
-                    {
-                        p->current_state = p->get_fail_state();
-                        return;
-                    }
-                    qDebug() << "GLSL SHADER PROGRAM LINKED";
-
-                    // Bind shader pipeline for use
-                    if (!p->program.bind())
-                    {
-                        p->current_state = p->get_fail_state();
-                        return;
-                    }
-
-                    qDebug() << "program max geom output vertices => " << p->program.maxGeometryOutputVertices();
-
-                    GLuint program_id = p->program.programId();
-
-                    qDebug() << "program.programId() => " << program_id;
-
-                    GLint i;                    // var's id
-                    GLint count;                // active vars count
-                    GLint size;                 // size of the variable
-
-                    GLenum type;                // type of the variable (float, vec3 or mat4, etc)
-
-                    const GLsizei bufSize = 1024; // maximum name length
-                    GLchar name[bufSize];         // variable GLSL name
-                    GLsizei length;               // variable name length
-
-                    glGetProgramiv(program_id, GL_ACTIVE_ATTRIBUTES, &count);
-
-                    qDebug() << "Active Attributes:" << count;
-
-                    for (i = 0; i < count; i++)
-                    {
-                        glGetActiveAttrib(program_id, (GLuint)i, bufSize, &length, &size, &type, name);
-
-                        printf ( "Attribute #%d Type: '%s' Name: '%s'\n" , i
-                               , gx::vtxa::get_glsl_type_name(type)
-                               , name
-                               );
-                    }
-
-                    glGetProgramiv(program_id, GL_ACTIVE_UNIFORMS, &count);
-
-                    qDebug() << "Active Uniforms:" << count;
-
-                    for (i = 0; i < count; i++)
-                    {
-                        glGetActiveUniform(program_id, (GLuint)i, bufSize, &length, &size, &type, name);
-
-                        printf ( "Uniform #%d Type: '%s' Name: '%s' Size:%d\n" , i
-                               , gx::unfa::get_glsl_type_name(type)
-                               , name
-                               , size
-                               );
-                    }
-                }
-                virtual const char* get_failure(prog*) { return "empty INIT state"; }
-            } ss; return &ss;
-        }
+        static some_state* get_init_state();
         static some_state* get_draw_state() {
             static struct : some_state {
                 virtual void set_current(prog*) {}
