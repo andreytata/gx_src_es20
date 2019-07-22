@@ -772,6 +772,8 @@ namespace gx
         std::map<std::string, vtxa*> program_active_attributes;  // this program active vertex-vars
         std::map<std::string, unfa*> program_active_uniform;
 
+        void qdebug_active_variables();  // qDebug() << GLSL prog info ( visitors test & example )
+
         struct some_state: protected QOpenGLFunctions {
             virtual ~some_state() {}
             virtual void set_current(prog*) = 0;
