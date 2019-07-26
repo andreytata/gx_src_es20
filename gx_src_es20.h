@@ -71,19 +71,71 @@ namespace gx
         std::list<tran*> joints;              // skin's fixed exported joints in bind-pos
     };
 
-    struct shgr   // shading group material and surface based(real-time animated view-surface)
+    struct shgr  // shading group material and surface based(real-time animated view-surface)
     {
-        surf* mp_surf;
-        prog* mp_prog;
-
         std::map<std::string, unfa*> m_vars;  // changed dependances (uniform attributes)
                                               // changed textures and other uniforms
                                               // initial contain self mp_surf->m_vars;
-        std::list<tran*> m_to_export_root;    // editable exported scene position
-        std::list<tran*> m_to_mount_root;     // scene root scene initial - empty
-        std::list<tran*> m_joints;            // animated joints, binded to other transformations
-        virtual void draw() { }
+        std::list<tran*> m_to_export_root;        // editable exported scene position
+        std::list<tran*> m_to_mount_root;         // scene root scene initial - empty
+        std::list<tran*> m_joints;                // animated joints, binded to other transform
+
+        gx::prog* mp_prog = nullptr;              // set once - create new shgr with other prog
+        gx::surf* mp_data = nullptr;              // set once - create new shgr with other surf
+
+        struct shgr_state                         // abstract shading group state
+        {
+            virtual ~shgr_state(){}
+            virtual void bind(shgr*) const = 0;
+            virtual void draw(shgr*, const int&) const = 0;
+        };
+
+        shgr_state* curr_state=get_init_state();  // actual shading group state
+
+        // prepare program and vertex-data to draw ( delegated to current state )
+        void bind() { curr_state->bind(this); }
+
+        // draw elements use ibo from sub_geom[id] ( delegated to current state )
+        void draw(const int& ibo_id = 0) { curr_state->draw(this, ibo_id); }
+
+        static shgr_state* get_fail_state() { return nullptr; }  // shgr in failure state
+        static shgr_state* get_bind_state() { return nullptr; }  // this prog and vbo are binded
+        static shgr_state* get_free_state() { return nullptr; }  // this prog and vbo are released
+        static shgr_state* get_init_state();  // prepare prog and vbo (not inited)
+
+        bool is_curr_state(const gx::shgr::shgr_state* p_state) const
+        {
+            return curr_state == p_state ? true : false;
+        }
+
+        void make_draw_prog_data(gx::prog* p, gx::surf* s)
+        {
+            this->mp_prog = p;  // program and active attributes info
+            this->mp_data = s;  // immutable ? data source or exported data
+        }
+
+        void link_together();
+
+        const char* fail() const      // return last error description or NULL on success
+        {
+            return nullptr;
+        }
+
+
+        // change data source for uniform or flag variable
+        void bind( const char*, gx::unfa* )
+        {
+        }
+
+        void free( const char* )                   // reset changed data source for variable
+        {
+        }
+
+        int       get_geom_max()              const { return 0; }  // subgeomerties (index buffer)
+        int       get_geom_ibo(const char*)   const { return 0; }  //
+        gx::indx* get_geom_ptr(const int&)    const { return nullptr; }  //
     };
+
 
     // GL index array
     // Surf contain one or more named index arrays. Each faces set can be drawed
@@ -730,42 +782,12 @@ namespace gx
         virtual std::map<std::string, std::pair<vtxa*, int> >* get_vars() = 0;
         void on(stse::proc*p){p->on(this);}
     };
-
-    struct example
-    {
-        static vtxb* get_vtxb()
-        {
-            static struct : vtxb
-            {
-                float* get_buff() const { static float a[] = {1.f,2.f,3.f}; return a; }
-                int get_size() const { return 3*sizeof(float); }
-                std::map<std::string, std::pair<vtxa*, int > >* get_vars()
-                {
-                    static struct a_position: av4f  {
-                        vtxb* vbo;
-                        a_position(vtxb* interleaved):vbo(interleaved){}
-                        float* get_buff() { return vbo->get_buff(); }
-                        int    get_size() { return 1; }
-                    } attr0(this);
-                    static struct a_normals: av4f  {
-                        vtxb* vbo;
-                        a_normals(vtxb* interleaved):vbo(interleaved){}
-                        float* get_buff() { return vbo->get_buff(); }
-                        int    get_size() { return 1; }
-                    } attr1(this);
-                    static std::map<std::string, std::pair<vtxa*, int> > vars = {
-                       {"a_position", { &attr0, 0 } },
-                       {"a_normals" , { &attr1, 0 } },
-                    };
-                    return &vars;
-                }
-            } mapped_vbo; return &mapped_vbo;
-        }
-    };
 }
 
 namespace gx
 {
+    // GLSL PROGRAM in INIT, BIND, FAIL or FREE state
+    // Binding invocated from SHGR->bind/draw methods of states "init" "fail" "main"
     struct prog  // shared program fsm, some set of the prog* stored at GL-widget side
     {
         QOpenGLShaderProgram         program;                    // qt5 glsl program implementation
@@ -774,57 +796,73 @@ namespace gx
 
         void qdebug_active_variables();  // qDebug() << GLSL prog info ( visitors test & example )
 
-        struct some_state: protected QOpenGLFunctions {
-            virtual ~some_state() {}
+        struct prog_state: protected QOpenGLFunctions {
+            virtual ~prog_state() {}
             virtual void set_current(prog*) = 0;
             virtual const char* get_failure(prog*) = 0;
         };
 
-        static some_state* get_fail_state() {
-            static struct : some_state {
+        static prog_state* get_fail_state() {
+            static struct : prog_state {
                 virtual void set_current(prog*){}
                 virtual const char* get_failure(prog*) {return "empty FAIL state"; }
             }ss; return &ss;
         }
 
-        static some_state* get_init_state();
-        static some_state* get_draw_state() {
-            static struct : some_state {
+        static prog_state* get_init_state();
+
+        static prog_state* get_draw_state() {
+            static struct : prog_state {
                 virtual void set_current(prog*) {}
                 virtual const char* get_failure(prog*) { return "empty DRAW state"; }
             } ss; return &ss;
         }
-        static some_state* get_free_state() {
-            static struct : some_state {
+        static prog_state* get_free_state() {
+            static struct : prog_state {
                 virtual void set_current(prog*) {}
                 virtual const char* get_failure(prog*) { return "empty FREE state"; }
             } ss; return &ss;
         }
-        some_state *current_state = get_init_state();
+        prog_state *current_state = get_init_state();
 
         void set_current()        {        current_state->set_current(this); }
         const char* get_failure() { return current_state->get_failure(this); }
 
     };
 
+
     class root : public QOpenGLWidget, protected QOpenGLFunctions
     {
         Q_OBJECT
 
     public:
-        root(QWidget* parent = 0):QOpenGLWidget(parent){}
+        root(QWidget* parent = 0):QOpenGLWidget(parent) {}
 
         virtual ~root(){}
 
-        virtual gx::prog* get_program(const char* = nullptr) { return &prog0; }
+        virtual gx::prog* get_prog(const char* = nullptr) { return &prog0; }
+
+        virtual gx::surf* get_surf(const char* = nullptr) { return &test_surface0; }
+
     protected:
-        virtual void mousePressEvent   (QMouseEvent *e){qDebug()<<e;}  // override;
+        virtual void mousePressEvent   (QMouseEvent *e)
+        {
+            qDebug()<<e;
+            update();
+        }
 
-        virtual void mouseReleaseEvent (QMouseEvent *e){qDebug()<<e;}  // override;
+        virtual void mouseReleaseEvent (QMouseEvent *e)
+        {
+            qDebug()<<e;
+        }
 
-        virtual void timerEvent        (QTimerEvent *e){qDebug()<<e;}  // override;
+        virtual void timerEvent        (QTimerEvent *)
+        {
+            // update();
+        }
 
-        virtual void initializeGL ()              {
+        virtual void initializeGL ()
+        {
             initializeOpenGLFunctions();
 
             glClearColor(0, 0, 0, 1);
@@ -842,29 +880,9 @@ namespace gx
             // timer.start(120, this);
         }
 
-        virtual void resizeGL     (int w, int h)  { qDebug()<<"resizeGL"<<w<<h; }  // override;
+        virtual void resizeGL     (int w, int h)  { qDebug()<<"resizeGL"<<w<<h; }
 
-        virtual void paintGL      () {  // override;
-            // Если текстура или шейдер получены динамически, то и монтировать его прийдется
-            // из цикла рисования, в этом методе. Т.е. некая структура содержит автомат поведения
-            // шейдера и автомат поведения текстуры и автомат вершинного буфера. Каждый из них
-            // может находиться в разных состояниях готовности к рисованию. Собственно не готов -
-            // - готовится а затем рисуется, а если готов, то сразу рисуется.
-            // РИСУЕМОЕ
-            //   флаги которые нужно установить до рисования и сбросить после рисования
-            //   программа (шейдеры) которые нужно выбрать, скомпилить и установить до рисования
-            //   vbo|ibo вершинные атрибуты которые нужно установить до рисования
-            //   переменные которые нужно вычислить на момент рисования и послать в программу
-            // is  some way to detect invacate order:
-            // -- some visitor inspect scene "node's", on detect "shgr" in nodes, visitor get
-            // program info (is_back_order or is_direct_order)
-            // -- store world transform and projection pointers in some (final order) pop ir push
-            // -- some other visitor visit final order and detect "shgr's" programs state (compile/bind)
-            //    and compile/bind prog. Then, with current "prog's" attributes bind curr "shgr's"
-            // Prog - with potentisl variables store
-
-
-        }
+        virtual void paintGL();
 
         virtual void initShaders  ()
         {
@@ -938,8 +956,56 @@ namespace gx
 
         }
 
+        // Return binded or not binded VBO data in some current state
+        // Binding invocated on "bind" in states "init" "fail" "main"
+        // from SHGR->bind/draw methods of states "init" "fail" "main"
+        virtual vtxb* get_vtxb( const char* = 0 )  // 0 -> return surface from path
+        {
+            static struct : vtxb  // return test surface
+            {
+                float* get_buff() const { static float a[] = {1.f,2.f,3.f}; return a; }
+                int get_size() const { return 3*sizeof(float); }
+                std::map<std::string, std::pair<vtxa*, int > >* get_vars()
+                {
+                    static struct a_position: av4f  {
+                        vtxb* vbo;
+                        a_position(vtxb* interleaved):vbo(interleaved){}
+                        float* get_buff() { return vbo->get_buff(); }
+                        int    get_size() { return 1; }
+                    } attr0(this);
+                    static struct a_normals: av4f  {
+                        vtxb* vbo;
+                        a_normals(vtxb* interleaved):vbo(interleaved){}
+                        float* get_buff() { return vbo->get_buff(); }
+                        int    get_size() { return 1; }
+                    } attr1(this);
+                    static std::map<std::string, std::pair<vtxa*, int> > vars = {
+                       {"a_position", { &attr0, 0 } },
+                       {"a_normals" , { &attr1, 0 } },
+                    };
+                    return &vars;
+                }
+            }
+            mapped_vbo;
+            return &mapped_vbo;
+        }
+
+    public:
+        void add_shgr(const char* shgr_name, shgr* shgr_ptr)
+        {
+            m_shgr_dict[shgr_name] = shgr_ptr;
+        }
+
+        void del_shgr(const char* shgr_name)
+        {
+            m_shgr_dict.erase(shgr_name);
+        }
+        std::map<std::string, gx::shgr*> m_shgr_dict;
+
     private:
         gx::prog              prog0;
+        gx::surf              test_surface0;
+
         QBasicTimer           timer;
         QOpenGLShaderProgram  program;
         QOpenGLTexture       *texture;

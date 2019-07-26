@@ -131,6 +131,24 @@ const char* gx::unfa::get_glsl_type_name(const int& n)
 //#endif
 //    gl_widget.get_program()->qdebug_active_variables();  // TEST INVOCATOR
 //    return app.exec();
+// 1. Get program pointer TODO: get_prog("program name")
+//    gx::prog* p_prog = gl_widget.get_prog();
+// 2. Print program variables
+//    p_prog->qdebug_active_variables();
+// 3. Get surface ??
+//    gx::shgr test;
+//    struct test_surf_t : gx::surf
+//    {
+//    } test_surf;
+//    test.mp_prog = p_prog;
+//    test.mp_data = &test_surf;  // default variables data
+//    add shading group to draw-loop;
+//    gl_widget.add_shgr("test", &test);
+//    qDebug() << "Activated shading-groups:";
+//    for(auto active_shgr: gl_widget.m_shgr_dict) {
+//        qDebug() << active_shgr.first.c_str() << (void*)active_shgr.second;
+//    }
+//    return app.exec();
 //}
 
 void gx::prog::qdebug_active_variables()
@@ -204,9 +222,9 @@ void gx::prog::qdebug_active_variables()
     qDebug() << "}";
 }
 
-gx::prog::some_state* gx::prog::get_init_state()
+gx::prog::prog_state* gx::prog::get_init_state()
 {
-    static struct : some_state
+    static struct : prog_state
     {
         void set_current(prog* p)
         {
@@ -317,32 +335,13 @@ gx::prog::some_state* gx::prog::get_init_state()
     } ss; return &ss;
 }
 
-struct shgr
+gx::shgr::shgr_state* gx::shgr::get_init_state() // prepare prog and vbo (not inited)
 {
-    // 1.0 binded_VBO
-    //   1.1 Enabled array 1
-    //        ...
-    //   1.N Enabled array N
-    // IMMUTABLE MEMBERS
-    gx::prog* mp_prog = nullptr;  // set new prog are impossible - create new shgr with other prog
-    gx::surf* mp_data = nullptr;  // set new data are impossible - create new shgr with other surf
-
-    struct bind_state
-    {
-        virtual ~bind_state();
-        virtual void bind(shgr*) const = 0;
-        virtual void draw(shgr*, const int&) const = 0;
-    }
-    * p_bind_state  =  get_init_state();
-    static bind_state* get_fail_state() { return nullptr; }  // shgr in failure state
-    static bind_state* get_bind_state() { return nullptr; }  // this prog and vbo are binded
-    static bind_state* get_free_state() { return nullptr; }  // this prog and vbo are released
-    static bind_state* get_init_state() // prepare prog and vbo (not inited)
-    {
-        static struct: shgr::bind_state
+        static struct: gx::shgr::shgr_state
         {
             void draw(shgr* p_shgr, const int& ibo_id) const
             {
+                 // p_shgr->mp_prog->set_current();  // need bind program before draw
                  bind(p_shgr);           // bind change p_shgr's state to "fail" or "bind" state
                  p_shgr->draw(ibo_id);   // delegate "draw" to state choosen in "bind" method
                                          // of this "initial state"
@@ -350,13 +349,24 @@ struct shgr
 
             void bind(shgr* p_shgr) const
             {
+                // p_shgr->mp_prog->set_current();  // need bind program before detect variables locations
+
                 // static program's vertex attributes sources
                 static struct: gx::vtxa::proc
                 {
                     void on(gx::av1f* a){qDebug() << name << "float        GL_FLOAT        " << a->get_prog_indx();}
                     void on(gx::av2f* a){qDebug() << name << "vec2         GL_FLOAT_VEC2   " << a->get_prog_indx();}
                     void on(gx::av3f* a){qDebug() << name << "vec3         GL_FLOAT_VEC3   " << a->get_prog_indx();}
-                    void on(gx::av4f* a){qDebug() << name << "vec4         GL_FLOAT_VEC4   " << a->get_prog_indx();}
+                    void on(gx::av4f* a){
+                        // Enter here on each [active-attribute-with-type-vec4]
+                        // - UNKNOWN IS, exists or not apropriate vec4 buffer on data-source side
+                        // - Active GLSL attribute has valid name, all other fields are unknown
+                        // -
+                        // Find attribute's offset in surface data source "gx::surf* this->data"
+                        // vtxb.bind() =>
+                        //
+                        qDebug() << name << "vec4         GL_FLOAT_VEC4   " << a->get_prog_indx();
+                    }
                     void on(gx::av1i* a){qDebug() << name << "int          GL_INT          " << a->get_prog_indx();}
                     void on(gx::av2i* a){qDebug() << name << "ivec2        GL_INT_VEC2     " << a->get_prog_indx();}
                     void on(gx::av3i* a){qDebug() << name << "ivec3        GL_INT_VEC3     " << a->get_prog_indx();}
@@ -388,16 +398,10 @@ struct shgr
             }
         }
         init_bind_state; return &init_bind_state;
-    }
+}
 
-    void make_draw_prog_data(gx::prog* p, gx::surf* s)
-    {
-        this->mp_prog = p;  // program and active attributes info
-        this->mp_data = s;  // immutable ? data source or exported data
-    }
-
-    void link_together()
-    {
+void gx::shgr::link_together()
+{
         // static program's vertex attributes sources
         static struct: gx::vtxa::proc
         {
@@ -433,35 +437,38 @@ struct shgr
         // TODO: copy all uniform attributes in to this (here), to create dynamic namespace for
         // variables data sources switching. So, each created copy store self original data-ptr
         // and self own editable(inserted) data-ptr.
-    }
+}
 
-    const char* fail() const      // return last error description or NULL on success
-    {
-        return nullptr;
-    }
+// Если текстура или шейдер получены динамически, то и монтировать его прийдется
+// из цикла рисования, в этом методе. Т.е. некая структура содержит автомат поведения
+// шейдера и автомат поведения текстуры и автомат вершинного буфера. Каждый из них
+// может находиться в разных состояниях готовности к рисованию. Собственно не готов -
+// - готовится а затем рисуется, а если готов, то сразу рисуется.
+// РИСУЕМОЕ
+//   флаги которые нужно установить до рисования и сбросить после рисования
+//   программа (шейдеры) которые нужно выбрать, скомпилить и установить до рисования
+//   vbo|ibo вершинные атрибуты которые нужно установить до рисования
+//   переменные которые нужно вычислить на момент рисования и послать в программу
+// is  some way to detect invacate order:
+// -- some visitor inspect scene "node's", on detect "shgr" in nodes, visitor get
+// program info (is_back_order or is_direct_order)
+// -- store world transform and projection pointers in some (final order) pop ir push
+// -- some other visitor visit final order and detect "shgr's" programs state (compile/bind)
+//    and compile/bind prog. Then, with current "prog's" attributes bind curr "shgr's"
+// Prog - with potentisl variables store
+// Clear color and depth buffer
+void gx::root::paintGL()
+{
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    void bind()                                // prepare program and vertex-data to draw
-    {
-        p_bind_state->bind(this);
-    }
+    qDebug() << "Activated shading-groups:";
 
-    void draw(const int& ibo_id = 0)           // draw elements use ibo from sub_geom[id];
-    {
-        p_bind_state->draw(this, ibo_id);
+    for(auto view_pair: m_shgr_dict) {
+        qDebug() << view_pair.first.c_str() << (void*)view_pair.second;
+        gx::shgr* curr = view_pair.second;
+        curr->bind();
     }
-
-    void bind( const char*, gx::unfa* )        // change data source for uniform or flag variable
-    {
-    }
-
-    void free( const char* )                   // reset changed data source for variable
-    {
-    }
-
-    int       get_geom_max()              const { return 0; }  // subgeomerties (index buffer)
-    int       get_geom_ibo(const char*)   const { return 0; }  //
-    gx::indx* get_geom_ptr(const int&)    const { return nullptr; }  //
-};
+}
 
 //gx::root::root(QWidget* parent) : QOpenGLWidget(parent) {}
 
