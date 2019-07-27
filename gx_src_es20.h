@@ -6,10 +6,8 @@
 #include <string>
 #include <memory>
 
-//#include <QObject>
-#include <QBasicTimer>  //           timer;
-//QOpenGLShaderProgram  program;
-#include <QOpenGLTexture>  //       *texture;
+#include <QBasicTimer>
+#include <QOpenGLTexture>
 
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
@@ -93,7 +91,9 @@ namespace gx
         shgr_state* curr_state=get_init_state();  // actual shading group state
 
         // prepare program and vertex-data to draw ( delegated to current state )
-        void bind() { curr_state->bind(this); }
+        void bind() {
+            curr_state->bind(this);
+        }
 
         // draw elements use ibo from sub_geom[id] ( delegated to current state )
         void draw(const int& ibo_id = 0) { curr_state->draw(this, ibo_id); }
@@ -782,52 +782,34 @@ namespace gx
         virtual std::map<std::string, std::pair<vtxa*, int> >* get_vars() = 0;
         void on(stse::proc*p){p->on(this);}
     };
-}
 
-namespace gx
-{
-    // GLSL PROGRAM in INIT, BIND, FAIL or FREE state
-    // Binding invocated from SHGR->bind/draw methods of states "init" "fail" "main"
+
     struct prog  // shared program fsm, some set of the prog* stored at GL-widget side
     {
+        // ACTIVE GLES & GLSL VARS INFO
         QOpenGLShaderProgram         program;                    // qt5 glsl program implementation
-        std::map<std::string, vtxa*> program_active_attributes;  // this program active vertex-vars
-        std::map<std::string, unfa*> program_active_uniform;
+        std::map<std::string, vtxa*> program_active_attributes;  // Active vertex attributes
+        std::map<std::string, unfa*> program_active_uniform;     // Active uniform attributes
 
-        void qdebug_active_variables();  // qDebug() << GLSL prog info ( visitors test & example )
-
-        struct prog_state: protected QOpenGLFunctions {
+        // Abstract Behavior Interface (GOF State Machine)
+        struct prog_state: protected QOpenGLFunctions
+        {
             virtual ~prog_state() {}
             virtual void set_current(prog*) = 0;
             virtual const char* get_failure(prog*) = 0;
         };
-
-        static prog_state* get_fail_state() {
-            static struct : prog_state {
-                virtual void set_current(prog*){}
-                virtual const char* get_failure(prog*) {return "empty FAIL state"; }
-            }ss; return &ss;
-        }
-
-        static prog_state* get_init_state();
-
-        static prog_state* get_draw_state() {
-            static struct : prog_state {
-                virtual void set_current(prog*) {}
-                virtual const char* get_failure(prog*) { return "empty DRAW state"; }
-            } ss; return &ss;
-        }
-        static prog_state* get_free_state() {
-            static struct : prog_state {
-                virtual void set_current(prog*) {}
-                virtual const char* get_failure(prog*) { return "empty FREE state"; }
-            } ss; return &ss;
-        }
-        prog_state *current_state = get_init_state();
+        const char* switcher_info = "INIT: Constructor";         // Last switcher's message
+        prog_state* current_state = get_init_state();            // Set Initial State
+        prog_state* get_draw_state();
+        prog_state* get_fail_state();
+        prog_state* get_init_state();
+        prog_state* get_free_state();
 
         void set_current()        {        current_state->set_current(this); }
+
         const char* get_failure() { return current_state->get_failure(this); }
 
+        void qdebug_active_variables();  // qDebug() << GLSL prog info ( visitors test & example )
     };
 
 
@@ -845,6 +827,7 @@ namespace gx
         virtual gx::surf* get_surf(const char* = nullptr) { return &test_surface0; }
 
     protected:
+
         virtual void mousePressEvent   (QMouseEvent *e)
         {
             qDebug()<<e;
@@ -867,16 +850,9 @@ namespace gx
 
             glClearColor(0, 0, 0, 1);
 
-            initShaders();
-            initTextures();
-
-        //! [2]
-            // Enable depth buffer
             glEnable(GL_DEPTH_TEST);
 
-            // Enable back face culling
             glEnable(GL_CULL_FACE);
-        //! [2]
             // timer.start(120, this);
         }
 
@@ -884,77 +860,6 @@ namespace gx
 
         virtual void paintGL();
 
-        virtual void initShaders  ()
-        {
-            // TODO: REMOVE FROM HERE
-            prog0.set_current();
-
-            // Compile vertex shader
-            if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/vshader.glsl"))
-                close();
-
-            // Compile fragment shader
-            if (!program.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/fshader.glsl"))
-                close();
-
-            // Link shader pipeline
-            if (!program.link())
-                close();
-
-            // Bind shader pipeline for use
-            if (!program.bind())
-                close();
-
-            qDebug() << "program max geom output vertices => " << program.maxGeometryOutputVertices();
-
-            GLuint program_id = program.programId();
-
-            qDebug() << "program.programId() => " << program_id;
-
-            GLint i;                    // var's id
-            GLint count;                // active vars count
-            GLint size;                 // size of the variable
-
-            GLenum type;                // type of the variable (float, vec3 or mat4, etc)
-
-            const GLsizei bufSize = 64; // maximum name length
-            GLchar name[bufSize];       // variable GLSL name
-            GLsizei length;             // variable name length
-
-            glGetProgramiv(program_id, GL_ACTIVE_ATTRIBUTES, &count);
-
-            qDebug() << "Active Attributes:" << count;
-
-            for (i = 0; i < count; i++)
-            {
-                glGetActiveAttrib(program_id, (GLuint)i, bufSize, &length, &size, &type, name);
-
-                printf ( "Attribute #%d Type: '%s' Name: '%s'\n" , i
-                       , gx::vtxa::get_glsl_type_name(type)
-                       , name
-                       );
-            }
-
-            glGetProgramiv(program_id, GL_ACTIVE_UNIFORMS, &count);
-
-            qDebug() << "Active Uniforms:" << count;
-
-            for (i = 0; i < count; i++)
-            {
-                glGetActiveUniform(program_id, (GLuint)i, bufSize, &length, &size, &type, name);
-
-                printf ( "Uniform #%d Type: '%s' Name: '%s' Size:%d\n" , i
-                       , gx::unfa::get_glsl_type_name(type)
-                       , name
-                       , size
-                       );
-            }
-        }
-
-        void initTextures ()
-        {
-
-        }
 
         // Return binded or not binded VBO data in some current state
         // Binding invocated on "bind" in states "init" "fail" "main"

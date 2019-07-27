@@ -3,6 +3,8 @@
 QT += core gui widgets
 
   HEADERS     += $$PWD/gx_src_es20.h
-  SOURCES     += $$PWD/gx_src_es20.cpp
+  SOURCES     += $$PWD/gx_src_es20_root.cpp
+  SOURCES     += $$PWD/gx_src_es20_prog.cpp
+  SOURCES     += $$PWD/gx_src_es20_shgr.cpp
   INCLUDEPATH += $$PWD
 }
