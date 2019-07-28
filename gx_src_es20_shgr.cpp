@@ -14,7 +14,8 @@ gx::shgr::shgr_state* gx::shgr::get_init_state() // prepare prog and vbo (not in
 
             void bind(shgr* p_shgr) const
             {
-                // p_shgr->mp_prog->set_current();  // need bind program before detect variables locations
+                p_shgr->mp_prog->init();  // gl-functions init
+                p_shgr->mp_prog->set_current();  // need bind program before detect variables locations
 
                 // static program's vertex attributes sources
                 static struct: gx::vtxa::proc

@@ -783,7 +783,6 @@ namespace gx
         void on(stse::proc*p){p->on(this);}
     };
 
-
     struct prog  // shared program fsm, some set of the prog* stored at GL-widget side
     {
         // ACTIVE GLES & GLSL VARS INFO
@@ -794,6 +793,10 @@ namespace gx
         // Abstract Behavior Interface (GOF State Machine)
         struct prog_state: protected QOpenGLFunctions
         {
+            void init()
+            {
+                initializeOpenGLFunctions();
+            }
             virtual ~prog_state() {}
             virtual void set_current(prog*) = 0;
             virtual const char* get_failure(prog*) = 0;
@@ -804,6 +807,15 @@ namespace gx
         prog_state* get_fail_state();
         prog_state* get_init_state();
         prog_state* get_free_state();
+
+        void init()
+        {
+            qDebug() << "--> initializeOpenGLFunctions() in states";
+            get_draw_state()->init();
+            get_fail_state()->init();
+            get_init_state()->init();
+            get_free_state()->init();
+        }
 
         void set_current()        {        current_state->set_current(this); }
 

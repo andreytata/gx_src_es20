@@ -155,11 +155,12 @@ void gx::root::paintGL()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    qDebug() << "Activated shading-groups:";
+    qDebug() << "Activated shading-groups:" << m_shgr_dict.size();
 
     for(auto view_pair: m_shgr_dict) {
         qDebug() << view_pair.first.c_str() << (void*)view_pair.second;
         gx::shgr* curr = view_pair.second;
         curr->bind();
     }
+    qDebug() << "--Activated shading-groups\n";
 }
